@@ -34,7 +34,7 @@
             <span class="card-mark" aria-hidden="true">RB</span>
             <div><h2 id="authHeading">Welcome back</h2><p id="authSubheading">Sign in to your workspace.</p></div>
           </div>
-          <div class="auth-tabs" role="tablist" aria-label="Account access">
+          <div id="authTabs" class="auth-tabs" role="tablist" aria-label="Account access">
             <button class="auth-tab active" id="showLoginTab" type="button" role="tab" aria-selected="true">Log in</button>
             <button class="auth-tab" id="showSignupTab" type="button" role="tab" aria-selected="false">Create account</button>
           </div>
@@ -60,6 +60,14 @@
             <label>Email address<input id="recoveryEmail" type="email" autocomplete="email" required placeholder="you@example.com"></label>
             <button class="btn btn-primary" type="submit">Send recovery email</button>
             <button class="text-button" id="backToLogin" type="button">Back to login</button>
+          </form>
+
+          <form id="inviteSetupForm" class="form-stack" hidden>
+            <p class="form-note">You've been invited to RB Banner Maker. Choose a password below to accept the invitation and activate your account. You do not need a password from the administrator.</p>
+            <label>Create password<input id="invitePassword" name="password" type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters"></label>
+            <label>Confirm password<input id="invitePasswordConfirm" name="confirmPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="Enter the same password again"></label>
+            <button class="btn btn-primary" type="submit">Accept invitation &amp; set password</button>
+            <button class="text-button" id="cancelInviteSetup" type="button">Back to login</button>
           </form>
           <div id="authStatus" class="notice" role="status" aria-live="polite" hidden></div>
         </section>
