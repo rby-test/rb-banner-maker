@@ -242,12 +242,27 @@ $('clearCredentialLog').addEventListener('click', () => {
   localStorage.removeItem(CREDENTIAL_LOG_KEY); renderCredentialLog();
 });
 
-try { await handleAuthCallback(); } catch (error) {
-  if (window.location.search.includes('confirmation_token') || window.location.search.includes('recovery_token') || window.location.search.includes('invite_token')) {
-    showNotice($('authStatus'), error.message || 'The account link could not be processed. Request a fresh link and try again.', true);
+// Initialize asynchronous authentication without top-level await so Vite can
+// compile to its configured ES2020/browser targets.
+async function initializeAuth() {
+  try {
+    await handleAuthCallback();
+  } catch (error) {
+    if (window.location.search.includes('confirmation_token') ||
+        window.location.search.includes('recovery_token') ||
+        window.location.search.includes('invite_token')) {
+      showNotice(
+        $('authStatus'),
+        error.message || 'The account link could not be processed. Request a fresh link and try again.',
+        true
+      );
+    }
   }
+
+  currentUser = await getUser().catch(() => null);
+  if (currentUser && needsPasswordChange(currentUser)) showAuthMode('login');
+  render(currentUser);
+  if (qs.get('admin') === '1') $('adminLoginCard').hidden = false;
 }
-currentUser = await getUser().catch(() => null);
-if (currentUser && needsPasswordChange(currentUser)) showAuthMode('login');
-render(currentUser);
-if (qs.get('admin') === '1') { $('adminLoginCard').hidden = false; }
+
+void initializeAuth();
