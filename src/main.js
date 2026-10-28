@@ -23,7 +23,15 @@ function showNotice(element, message, error = false) {
   element.classList.toggle('error', error);
 }
 function clearNotice(element) { element.hidden = true; element.textContent = ''; element.classList.remove('error'); }
-function setBusy(form, busy) { for (const control of form.querySelectorAll('button,input')) control.disabled = busy; }
+function setBusy(form, busy) {
+  // Guard against a stale or missing form reference so error handling itself
+  // does not throw and hide the original authentication error.
+  if (!form || typeof form.querySelectorAll !== 'function') {
+    console.warn('[RB Banner Maker] Could not update disabled state: form reference is unavailable.');
+    return;
+  }
+  for (const control of form.querySelectorAll('button,input')) control.disabled = busy;
+}
 function escapeHTML(value) {
   return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 }
@@ -159,10 +167,22 @@ $('signupForm').addEventListener('submit', async event => {
   if (password !== $('signupConfirm').value) { showNotice($('authStatus'), 'The passwords do not match.', true); return; }
   setBusy(form, true);
   try {
-    const user = await signup($('signupEmail').value.trim(), password, {full_name: $('signupName').value.trim()});
-    const active = await getUser().catch(() => null);
-    if (active) render(active);
-    else showNotice($('authStatus'), `Account created for ${user.email || $('signupEmail').value}. Check your email for a confirmation link, then log in.`);
+    const email = $('signupEmail').value.trim();
+    await signup(email, password, {full_name: $('signupName').value.trim()});
+
+    // Netlify Identity sends an email-confirmation link by default. Keep the
+    // next step visible instead of switching straight to the logged-in screen.
+    $('loginEmail').value = email;
+    $('signupPassword').value = '';
+    $('signupConfirm').value = '';
+    showAuthMode('login');
+    $('authHeading').textContent = 'Check your email';
+    $('authSubheading').textContent = 'Confirm your email address, then return here to log in.';
+    showNotice(
+      $('authStatus'),
+      `Your registration was submitted for ${email}. Open your email inbox and click the RB Banner Maker confirmation link to activate your account. If you do not see the message, check Spam/Junk. After confirming, return here and log in.`,
+      false
+    );
   } catch (error) {
     // Keep the raw failure in the browser console so an operator can diagnose
     // Identity configuration/network errors without hiding the useful details.
