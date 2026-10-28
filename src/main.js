@@ -1,10 +1,9 @@
 import './site.css';
-import { signup, login, logout, getUser, handleAuthCallback, acceptInvite, requestPasswordRecovery, updateUser } from '@netlify/identity';
+import { signup, login, logout, getUser, handleAuthCallback, requestPasswordRecovery, updateUser } from '@netlify/identity';
 
 const $ = id => document.getElementById(id);
 const qs = new URLSearchParams(window.location.search);
 let currentUser = null;
-let pendingInviteToken = null;
 let adminPanelOpen = false;
 const CREDENTIAL_LOG_KEY = 'rbBannerMakerCredentialLogV1';
 
@@ -66,11 +65,9 @@ function downloadCSV(filename, rows) {
 }
 function showAuthMode(mode) {
   const loginMode = mode === 'login';
-  $('authTabs').hidden = false;
   $('loginForm').hidden = !loginMode;
   $('signupForm').hidden = loginMode;
   $('recoveryForm').hidden = true;
-  $('inviteSetupForm').hidden = true;
   $('showLoginTab').classList.toggle('active', loginMode);
   $('showSignupTab').classList.toggle('active', !loginMode);
   $('showLoginTab').setAttribute('aria-selected', String(loginMode));
@@ -78,20 +75,6 @@ function showAuthMode(mode) {
   $('authHeading').textContent = loginMode ? 'Welcome back' : 'Create your account';
   $('authSubheading').textContent = loginMode ? 'Sign in to your workspace.' : 'Your creative workspace starts here.';
   clearNotice($('authStatus'));
-}
-function showInviteMode() {
-  $('authScreen').hidden = false;
-  $('dashboard').hidden = true;
-  $('authTabs').hidden = true;
-  $('loginForm').hidden = true;
-  $('signupForm').hidden = true;
-  $('recoveryForm').hidden = true;
-  $('inviteSetupForm').hidden = false;
-  $('authHeading').textContent = 'Accept your invitation';
-  $('authSubheading').textContent = 'Choose your password to activate your account.';
-  $('sessionLabel').textContent = 'Complete account setup';
-  clearNotice($('authStatus'));
-  $('invitePassword').focus();
 }
 function render(user) {
   currentUser = user || null;
@@ -220,62 +203,6 @@ $('signupForm').addEventListener('submit', async event => {
   }
   finally { setBusy(form, false); }
 });
-$('cancelInviteSetup').addEventListener('click', () => {
-  pendingInviteToken = null;
-  $('invitePassword').value = '';
-  $('invitePasswordConfirm').value = '';
-  showAuthMode('login');
-  showNotice($('authStatus'), 'Invitation setup was cancelled. If you still need access, ask the administrator to send a new invitation.');
-});
-$('inviteSetupForm').addEventListener('submit', async event => {
-  const form = event.currentTarget;
-  event.preventDefault();
-  clearNotice($('authStatus'));
-  const password = $('invitePassword').value;
-  const confirmPassword = $('invitePasswordConfirm').value;
-  if (password.length < 8) {
-    showNotice($('authStatus'), 'Use a password with at least 8 characters.', true);
-    return;
-  }
-  if (password !== confirmPassword) {
-    showNotice($('authStatus'), 'The passwords do not match. Please try again.', true);
-    return;
-  }
-  if (!pendingInviteToken) {
-    showNotice($('authStatus'), 'This invitation link is missing or expired. Ask the administrator to send a new invitation.', true);
-    return;
-  }
-  setBusy(form, true);
-  try {
-    // Netlify Identity invitations remain unconfirmed until this token is
-    // accepted. The invited user chooses their own password here.
-    const acceptedUser = await acceptInvite(pendingInviteToken, password);
-    pendingInviteToken = null;
-    $('invitePassword').value = '';
-    $('invitePasswordConfirm').value = '';
-    currentUser = acceptedUser || await getUser().catch(() => null);
-    if (currentUser) {
-      render(currentUser);
-      $('welcomeText').textContent = 'Invitation accepted. Your RB Banner Maker account is ready.';
-    } else {
-      render(null);
-      showAuthMode('login');
-      showNotice($('authStatus'), 'Invitation accepted. Your account is active; please log in with your email and the password you just created.');
-    }
-  } catch (error) {
-    console.error('[RB Banner Maker] Invitation acceptance failed:', error);
-    const detail = error?.message || error?.msg || error?.error_description || '';
-    const status = error?.status || error?.cause?.status;
-    const message = Number(status) === 404
-      ? 'The Netlify Identity invitation endpoint returned 404. Check Identity is enabled for this site, then ask the administrator to resend the invitation.'
-      : (detail.includes('invalid_grant') || detail.toLowerCase().includes('expired') || detail.toLowerCase().includes('invalid token')
-        ? 'This invitation link is invalid, expired, or has already been used. Ask the administrator to send a fresh invitation, then open the new email link and choose a password here.'
-        : (detail || 'We could not accept this invitation. Ask the administrator to send a new invitation and try again.'));
-    showNotice($('authStatus'), message, true);
-  } finally {
-    setBusy(form, false);
-  }
-});
 $('recoveryForm').addEventListener('submit', async event => {
   const form = event.currentTarget;
   event.preventDefault(); clearNotice($('authStatus')); setBusy(form, true);
@@ -361,33 +288,18 @@ $('clearCredentialLog').addEventListener('click', () => {
 // Initialize asynchronous authentication without top-level await so Vite can
 // compile to its configured ES2020/browser targets.
 async function initializeAuth() {
-  // Netlify puts invite/confirmation/recovery tokens in the URL hash, not the
-  // query string. Capture the invite token before processing the callback.
-  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-  const inviteTokenFromHash = hashParams.get('invite_token');
-  let callbackResult = null;
   try {
-    callbackResult = await handleAuthCallback();
+    await handleAuthCallback();
   } catch (error) {
-    console.error('[RB Banner Maker] Auth callback failed:', error);
-    if (inviteTokenFromHash) {
-      pendingInviteToken = inviteTokenFromHash;
-      render(null);
-      showInviteMode();
-      showNotice($('authStatus'), 'Your invitation link was received, but the callback could not be completed automatically. Try choosing a password below. If it fails, request a fresh invitation.', true);
-      return;
+    if (window.location.search.includes('confirmation_token') ||
+        window.location.search.includes('recovery_token') ||
+        window.location.search.includes('invite_token')) {
+      showNotice(
+        $('authStatus'),
+        error.message || 'The account link could not be processed. Request a fresh link and try again.',
+        true
+      );
     }
-    const hadAuthToken = /(?:confirmation_token|recovery_token|email_change_token)/.test(window.location.hash);
-    if (hadAuthToken) {
-      showNotice($('authStatus'), error.message || 'The account link could not be processed. Request a fresh link and try again.', true);
-    }
-  }
-
-  if (callbackResult?.type === 'invite' && callbackResult.token) {
-    pendingInviteToken = callbackResult.token;
-    render(null);
-    showInviteMode();
-    return;
   }
 
   currentUser = await getUser().catch(() => null);

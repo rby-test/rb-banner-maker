@@ -7,7 +7,8 @@ This is a static Vite website with Netlify Identity account authentication and a
 1. Upload this project to a Git repository (GitHub, GitLab, or another supported provider) and connect that repository from <https://app.netlify.com/>. This project includes serverless Functions, so deploy it through a Git-connected Netlify build or Netlify CLI rather than relying on a static-only drag-and-drop deployment.
 2. Build settings are in `netlify.toml`: build command `npm run build`, publish directory `dist`, functions directory `netlify/functions`.
 3. In the Netlify project dashboard, open **Project configuration → Identity** and enable Identity.
-4. Under **Identity → Registration**, set registration to **Open** so anyone can sign up. Keep email confirmation enabled for better account security.
+4. Under **Identity → Registration**, set registration to **Open** so anyone can sign up. Keep email confirmation enabled. Under **Identity → Emails → Confirmation template → Configure**, make sure the option to allow sign-up without email verification is **not** checked; this ensures a confirmation email is sent after registration. The app then tells the user to check their inbox (and Spam/Junk) before logging in.
+   - If the browser shows `/.netlify/identity/signup` or `/.netlify/identity/token` returning **404**, the Identity service is not active/reachable for the exact Netlify site you are visiting. Enable it in that site's dashboard first; code changes alone cannot create the Identity service. Verify the site/domain and HTTPS, then retry.
 5. Deploy the site over HTTPS. Open the live URL and create your own account.
 6. In **Identity → Users**, open your own account, edit its roles, and add the exact role `admin`. Save, then sign out and sign in again so the updated role is reflected in your session.
 7. Click the small `•••` button in the top-right corner and use your admin account to unlock the control desk.
@@ -18,11 +19,17 @@ Official references:
 - <https://docs.netlify.com/manage/security/secure-access-to-sites/identity/use-identity-in-functions/>
 - <https://docs.netlify.com/build/functions/environment-variables/>
 
+## Recent UI updates
+
+- Replaced the image logo with a plain text **RB** wordmark across the login page and editor. The logo image asset is no longer needed.
+- Improved narrow-screen spacing, touch target sizes, form input sizing, and editor export buttons for phone use.
+- After registration, users are switched to the login tab and shown a clear email-confirmation message with Spam/Junk guidance.
+
 ## Features
 
-- Public email/password sign-up, sign-in, and password recovery.
+- Public email/password sign-up, sign-in, and password recovery. After signup, the login screen displays a prominent instruction to open the confirmation email, click its link, and return to log in.
 - Session restoration through Netlify Identity.
-- Banner editor at `/maker.html`, with its CSS and JavaScript in separate source files under `src/`.
+- Banner editor at `/maker.html`, with its CSS and JavaScript in separate source files under `src/`. Responsive layouts support phones, tablets, and desktop browsers.
 - A discreet top-right admin entry button. Admin rights are checked again inside the server function; hiding the button is not used as the security boundary.
 - Admin can create users with a generated temporary password, reset a non-admin user's password, or revoke a non-admin account.
 - Admin-created/reset accounts must change the temporary password at first login.
