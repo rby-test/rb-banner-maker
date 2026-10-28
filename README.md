@@ -25,6 +25,12 @@ Official references:
 - Improved narrow-screen spacing, touch target sizes, form input sizing, and editor export buttons for phone use.
 - After registration, users are switched to the login tab and shown a clear email-confirmation message with Spam/Junk guidance.
 
+## Editing in the preview
+
+- **Tap the banner** in the phone preview to type directly on it (Instagram-style). Tap outside, press Esc, or hit **Done** to finish.
+- **Drag a corner handle** to resize the font like in Photoshop. Manual resizing switches *Auto-fit* off; turn it back on (phone quick bar or sidebar toggle) to snap the banner back inside the safe zones.
+- **Phone layout (≤ 900 px):** preview on top, a quick bar (size slider, A−/A+, text/banner colours, shape, font, align, Auto-fit, Shadow), advanced settings behind **More settings**, and a pinned **Export** bar.
+
 ## Features
 
 - Public email/password sign-up, sign-in, and password recovery. After signup, the login screen displays a prominent instruction to open the confirmation email, click its link, and return to log in.

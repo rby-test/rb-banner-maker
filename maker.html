@@ -32,8 +32,8 @@
   </header>
 
   <main class="workspace">
-    <section class="panel" aria-label="Banner settings">
-      <div class="panel-head"><h2>Customize banner</h2><span>Live safe-zone controls</span></div>
+    <section class="panel" id="settingsPanel" aria-label="Banner settings">
+      <div class="panel-head" id="settingsHead"><h2>Customize banner</h2><span>Live safe-zone controls</span></div>
       <div class="controls">
         <div class="field">
           <div class="label-line"><label for="text">Text</label><span class="value" id="lineCount">2 lines</span></div>
@@ -93,7 +93,7 @@ $0/month.</textarea>
         </div>
         <div class="field">
           <div class="label-line"><label for="size">Target / max font size</label><output id="sizeOut">68 px</output></div>
-          <input id="size" type="range" min="32" max="110" value="68">
+          <input id="size" type="range" min="20" max="240" value="68">
         </div>
         <div class="two">
           <div class="field">
@@ -242,6 +242,7 @@ $0/month.</textarea>
         <div class="preview-meta">
           <span class="live"><i class="dot"></i> <span id="liveBannerSummary">Centered above 4:5 · 68px</span></span>
           <span class="value" id="dimensionLabel">1080 × 1920</span>
+          <button type="button" class="done-btn" id="doneEdit">✓ Done</button>
         </div>
         <div class="preview-stage">
           <div class="phone" id="deviceFrame">
@@ -254,8 +255,43 @@ $0/month.</textarea>
                 <div class="bottom-ui"><div class="reply">Reply to story…</div><span class="heart">♡</span><span class="send">➤</span></div>
               </div>
               <div class="home-indicator hidden" id="homeIndicator"></div>
+              <div class="edit-layer" id="editLayer">
+                <textarea id="inlineEditor" class="inline-editor" spellcheck="false" autocomplete="off" autocapitalize="sentences" maxlength="400" aria-label="Edit banner text"></textarea>
+                <div class="sel-box" id="selBox">
+                  <i class="handle tl" data-corner="tl"></i><i class="handle tr" data-corner="tr"></i>
+                  <i class="handle bl" data-corner="bl"></i><i class="handle br" data-corner="br"></i>
+                </div>
+                <div class="sel-tag hint" id="selTag">✎ Tap banner to edit</div>
+              </div>
             </div>
           </div>
+        </div>
+
+
+        <div class="quick-bar" id="quickBar" aria-label="Quick controls">
+          <div class="q-size">
+            <button type="button" class="q-step" id="qSizeDown" aria-label="Smaller text">A<small>−</small></button>
+            <input id="qSize" type="range" min="20" max="240" value="68" aria-label="Text size">
+            <button type="button" class="q-step" id="qSizeUp" aria-label="Bigger text">A<small>+</small></button>
+            <output id="qSizeOut">68</output>
+          </div>
+          <div class="q-scroll" role="group" aria-label="Style">
+            <label class="q-chip q-color"><input id="qTextColor" type="color" value="#080808" aria-label="Text color"><span>Text</span></label>
+            <label class="q-chip q-color"><input id="qFillColor" type="color" value="#eaeaea" aria-label="Banner color"><span>Banner</span></label>
+            <button type="button" class="q-chip" data-q-shape="connected">Connected</button>
+            <button type="button" class="q-chip" data-q-shape="separate">Split</button>
+            <button type="button" class="q-chip" data-q-shape="pill">Pill</button>
+            <button type="button" class="q-chip" data-q-shape="none">Text only</button>
+          </div>
+          <div class="q-scroll" role="group" aria-label="Layout">
+            <select id="qFont" class="q-chip q-select" aria-label="Font"></select>
+            <button type="button" class="q-chip" data-q-align="left" aria-label="Align left">⬅︎</button>
+            <button type="button" class="q-chip" data-q-align="center" aria-label="Align center">↔︎</button>
+            <button type="button" class="q-chip" data-q-align="right" aria-label="Align right">➡︎</button>
+            <button type="button" class="q-chip" id="qAuto">Auto-fit</button>
+            <button type="button" class="q-chip" id="qShadow">Shadow</button>
+          </div>
+          <button type="button" class="more-btn" id="toggleSettings" aria-expanded="false">⚙ More settings ▾</button>
         </div>
 
         <div class="field">
@@ -280,6 +316,10 @@ $0/month.</textarea>
     </section>
   </main>
   <div class="footer-note">RB Banner Maker · Account-protected workspace · Transparent PNG export.</div>
+</div>
+<div class="mobile-bar" id="mobileBar">
+  <button type="button" id="exportM" class="primary">Export transparent PNG ↗</button>
+  <button type="button" id="copyM" class="secondary">Copy</button>
 </div>
 <script type="module" src="/src/maker.js"></script>
 </body>
