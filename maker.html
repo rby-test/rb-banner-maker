@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RB Banner Maker</title>
+<meta name="description" content="Create multi-line video caption banners with automatic 9:16, 4:5, and 1:1 safe-zone centering, auto font-size scaling, 3-line overflow handling, and transparent PNG export." />
+<meta property="og:title" content="RB Banner Maker" />
+<meta property="og:description" content="Create multi-line video caption banners with automatic 9:16, 4:5, and 1:1 safe-zone centering, auto font-size scaling, 3-line overflow handling, and transparent PNG export." />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary_large_image" />
+<link rel="icon" type="image/png" href="/rb-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@600;700;800;900&family=Roboto:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/src/maker.css">
+</head>
+<body class="auth-pending">
+<div class="app">
+  <header>
+    <div class="brand">
+      <img class="logo" src="/rb-logo.png" alt="RB Banner Maker">
+      <div>
+        <h1>RB Banner Maker</h1>
+        <div class="subhead">Helvetica Neue Extra Bold default · Instagram Sans Bold · 1080 × 1920 Safe-Zone Auto-Fit</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="top-tag" id="presetTag">Phone · 1080 × 1920 (9:16)</div>
+      <a class="secondary account-link" href="/">Account</a>
+      <button type="button" id="makerLogout" class="secondary">Sign out</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <section class="panel" aria-label="Banner settings">
+      <div class="panel-head"><h2>Customize banner</h2><span>Live safe-zone controls</span></div>
+      <div class="controls">
+        <div class="field">
+          <div class="label-line"><label for="text">Text</label><span class="value" id="lineCount">2 lines</span></div>
+          <textarea id="text" spellcheck="false">$87,195 in IRS debt.
+$0/month.</textarea>
+          <div class="safe-pill-bar" id="safeZoneStatusBar">
+            <span id="safeZoneRuleLabel">Safe Zone: Centered above 4:5 line</span>
+            <strong id="effectiveFontReadout">68 px</strong>
+          </div>
+          <div class="hint">1–2 lines stay centered above the 4:5 safe line and auto-shrink when hitting the safe zone. If text breaks into 3+ lines, it crosses the 4:5 line while staying inside the top and side video safe zones.</div>
+        </div>
+
+        <div class="checkrow">
+          <div>
+            <strong>Lock in safe zone &amp; center above 4:5</strong>
+            <small>Centers between Top Safe Line and 4:5 Line (1–2 lines); allows 3+ lines to cross 4:5</small>
+          </div>
+          <input class="switch" id="safeZoneLock" type="checkbox" checked aria-label="Lock in safe zone and center above 4:5">
+        </div>
+
+        <div class="checkrow">
+          <div>
+            <strong>Auto-adjust font size on safe zone hit</strong>
+            <small>Automatically scales font down when hitting top, 4:5 (for 1–2 lines), or side video safe zones</small>
+          </div>
+          <input class="switch" id="autoFontSize" type="checkbox" checked aria-label="Auto-adjust font size when hitting safe zone">
+        </div>
+
+        <div class="two">
+          <div class="field"><label for="font">Font rendering</label>
+            <select id="font">
+              <option value="helvetica" selected>Helvetica Neue (default)</option>
+              <option value="instagram_bold">Instagram Sans Bold</option>
+              <option value="roboto">Roboto · Google Fonts</option>
+              <option value="sfpro" id="sfproOption" disabled hidden>SF Pro · macOS system font (Mac only)</option>
+              <option value="iphone">Apple system sans</option>
+              <option value="android">Android-like · Roboto</option>
+              <option value="instagram">Instagram Sans (regular)</option>
+              <option value="device">Device-native system sans</option>
+              <option value="arial">Arial</option>
+              <option value="uploaded" disabled>Uploaded font file</option>
+            </select>
+          </div>
+          <div class="field"><label for="weight">Font weight</label>
+            <select id="weight">
+              <option value="600">Semi-bold · 600</option>
+              <option value="700">Bold · 700</option>
+              <option value="800" selected>Extra-bold · 800 (default)</option>
+              <option value="900">Black · 900</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="fontFile">Load a licensed font file (optional)</label>
+          <input id="fontFile" type="file" accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2">
+          <div class="hint" id="fontFileStatus">Use a font file you have permission to use. You can also load your local Instagram Sans Bold .ttf/.otf file here.</div>
+        </div>
+        <div class="field">
+          <div class="label-line"><label for="size">Target / max font size</label><output id="sizeOut">68 px</output></div>
+          <input id="size" type="range" min="32" max="110" value="68">
+        </div>
+        <div class="two">
+          <div class="field">
+            <div class="label-line"><label for="lineHeight">Line spacing</label><output id="lineHeightOut">1.16×</output></div>
+            <input id="lineHeight" type="range" min="0.82" max="1.45" step="0.01" value="1.16">
+          </div>
+          <div class="field">
+            <div class="label-line"><label for="letterSpacing">Letter spacing</label><output id="letterSpacingOut">0 px</output></div>
+            <input id="letterSpacing" type="range" min="-2" max="4" step="0.1" value="0">
+          </div>
+        </div>
+
+        <div class="divider"></div><div class="section-title">Video safe zones (1080 × 1920)</div>
+        <div class="two">
+          <div class="field">
+            <div class="label-line"><label for="topSafePx">Top safe line (cyan)</label><output id="topSafePxOut">88 px</output></div>
+            <input id="topSafePx" type="range" min="40" max="180" step="1" value="88">
+          </div>
+          <div class="field">
+            <div class="label-line"><label for="maxWidth">Side safe zone width</label><output id="maxWidthOut">88%</output></div>
+            <input id="maxWidth" type="range" min="50" max="94" step="1" value="88">
+          </div>
+        </div>
+        <div class="field" id="manualTopField">
+          <div class="label-line"><label for="top">Manual top offset (when safe-zone lock is off)</label><output id="topOut">4.7%</output></div>
+          <input id="top" type="range" min="3" max="75" step="0.1" value="4.7">
+        </div>
+        <div class="two">
+          <div class="field"><label for="align">Horizontal alignment</label><select id="align"><option value="center" selected>Center (safe zone)</option><option value="left">Left safe edge</option><option value="right">Right safe edge</option></select></div>
+          <div class="field"><label for="backdrop">Phone preview backdrop</label><select id="backdrop"><option value="reference" selected>image.png dark reference</option><option value="checker">Transparency checkerboard</option><option value="green">Chroma green</option><option value="white">White</option><option value="black">Black</option><option value="gray">Dark gray</option></select></div>
+        </div>
+
+        <div class="divider"></div><div class="section-title">Background shape</div>
+        <div class="field"><label for="shape">Multiline shape</label>
+          <select id="shape">
+            <option value="connected" selected>Connected rounded outline · Classic-like</option>
+            <option value="separate">Separate rounded rectangle per line</option>
+            <option value="pill">One pill around all text</option>
+            <option value="none">Text only · no background</option>
+          </select>
+        </div>
+        <div class="two">
+          <div class="field">
+            <div class="label-line"><label for="padX">Horizontal padding</label><output id="padXOut">22 px</output></div>
+            <input id="padX" type="range" min="4" max="70" value="22">
+          </div>
+          <div class="field">
+            <div class="label-line"><label for="padY">Vertical padding</label><output id="padYOut">18 px</output></div>
+            <input id="padY" type="range" min="2" max="55" value="18">
+          </div>
+        </div>
+        <div class="two">
+          <div class="field">
+            <div class="label-line"><label for="radius">Corner roundness</label><output id="radiusOut">15 px</output></div>
+            <input id="radius" type="range" min="0" max="42" value="15">
+          </div>
+          <div class="field">
+            <div class="label-line"><label for="join">Line-break curve position</label><output id="joinOut">70%</output></div>
+            <input id="join" type="range" min="50" max="82" step="1" value="70">
+          </div>
+        </div>
+        <div class="two">
+          <div class="color-field"><div class="color-meta"><strong>Text color</strong><small id="textColorCode">#080808</small></div><input id="textColor" type="color" value="#080808" aria-label="Text color"></div>
+          <div class="color-field"><div class="color-meta"><strong>Banner fill</strong><small id="fillColorCode">#EAEAEA</small></div><input id="fillColor" type="color" value="#eaeaea" aria-label="Banner fill color"></div>
+        </div>
+        <div class="two">
+          <div class="color-field"><div class="color-meta"><strong>Edge / outline</strong><small id="strokeColorCode">#D7D7D7</small></div><input id="strokeColor" type="color" value="#d7d7d7" aria-label="Outline color"></div>
+          <div class="field"><div class="label-line"><label for="strokeWidth">Outline width</label><output id="strokeWidthOut">1.5 px</output></div><input id="strokeWidth" type="range" min="0" max="5" step="0.5" value="1.5"></div>
+        </div>
+        <div class="checkrow"><div><strong>Drop shadow</strong><small>Included in transparent PNG exports</small></div><input class="switch" id="shadow" type="checkbox" checked aria-label="Enable drop shadow"></div>
+        <div class="field" id="shadowSettings">
+          <div class="field"><label for="shadowTarget">Apply shadow to</label>
+            <select id="shadowTarget">
+              <option value="banner" selected>Banner / sticker</option>
+              <option value="text">Text only</option>
+              <option value="both">Banner + text</option>
+            </select>
+          </div>
+          <div class="two">
+            <div class="color-field"><div class="color-meta"><strong>Shadow color</strong><small id="shadowColorCode">#5B524C</small></div><input id="shadowColor" type="color" value="#5b524c" aria-label="Drop shadow color"></div>
+            <div class="field"><div class="label-line"><label for="shadowOpacity">Opacity</label><output id="shadowOpacityOut">22%</output></div><input id="shadowOpacity" type="range" min="0" max="80" step="1" value="22"></div>
+          </div>
+          <div class="field"><div class="label-line"><label for="shadowBlur">Blur</label><output id="shadowBlurOut">8 px</output></div><input id="shadowBlur" type="range" min="0" max="40" step="1" value="8"></div>
+          <div class="two">
+            <div class="field"><div class="label-line"><label for="shadowOffsetX">Horizontal offset</label><output id="shadowOffsetXOut">0 px</output></div><input id="shadowOffsetX" type="range" min="-24" max="24" step="1" value="0"></div>
+            <div class="field"><div class="label-line"><label for="shadowOffsetY">Vertical offset</label><output id="shadowOffsetYOut">4 px</output></div><input id="shadowOffsetY" type="range" min="-24" max="24" step="1" value="4"></div>
+          </div>
+        </div>
+
+        <div class="divider"></div><div class="section-title">Guides &amp; export options (9:16, 4:5, 1:1)</div>
+        <div class="field">
+          <label for="guideRatio">Safe-zone guide on 1080 × 1920 phone · preview only</label>
+          <select id="guideRatio">
+            <option value="reference" selected>image.png Safe Lines · Top Safe + 4:5 + 1:1</option>
+            <option value="reference_sides">image.png Safe Lines + Side Safe Rails</option>
+            <option value="4:5">4:5 · Instagram portrait feed guide only</option>
+            <option value="1:1">1:1 · Square post guide only</option>
+            <option value="none">No guide lines</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="canvasPreset">Export format / aspect ratio</label>
+          <select id="canvasPreset">
+            <option value="story" selected>9:16 · Full Story / Reels (1080 × 1920)</option>
+            <option value="portrait">4:5 · Portrait Feed (1080 × 1350)</option>
+            <option value="square">1:1 · Square Post (1080 × 1080)</option>
+            <option value="custom">Custom dimensions…</option>
+          </select>
+        </div>
+        <div class="export-dimensions hidden" id="customDimensions">
+          <div class="field"><label for="customWidth">Export width (px)</label><input id="customWidth" type="number" min="64" max="6000" step="1" value="1080"></div>
+          <div class="field"><label for="customHeight">Export height (px)</label><input id="customHeight" type="number" min="64" max="6000" step="1" value="1920"></div>
+        </div>
+        <div class="two">
+          <div class="field"><label for="exportMode">PNG export area</label>
+            <select id="exportMode">
+              <option value="canvas" selected>Full selected canvas (9:16 / 4:5 / 1:1) · transparent</option>
+              <option value="banner">Banner sticker only · cropped + transparent</option>
+              <option value="reference_sample">Full 1080×1920 with image.png guide lines &amp; dark bg</option>
+            </select>
+          </div>
+          <div class="field"><label for="scale">Export resolution</label>
+            <select id="scale">
+              <option value="1" selected>1× · exact dimensions</option>
+              <option value="2">2× · high resolution</option>
+              <option value="3">3× · extra high</option>
+              <option value="4">4× · maximum</option>
+            </select>
+          </div>
+        </div>
+        <div class="checkrow">
+          <div>
+            <strong>Show phone story UI chrome</strong>
+            <small>Preview-only clock &amp; reply bar (off by default to match image.png cleanly)</small>
+          </div>
+          <input class="switch" id="showStoryUi" type="checkbox" aria-label="Show phone story UI chrome">
+        </div>
+        <div class="guide-info"><span>ⓘ</span><div><b>Transparent PNG export.</b> The phone preview is locked to an exact <b>1080 × 1920 (9:16)</b> frame. Export in <b>9:16 (1080×1920)</b>, <b>4:5 (1080×1350)</b>, <b>1:1 (1080×1080)</b>, or <b>Cropped Banner</b> with a transparent background.</div></div>
+        <button type="button" class="secondary" id="reset">Reset to image.png reference look</button>
+      </div>
+    </section>
+
+    <section class="panel preview-panel" aria-label="Phone preview and export">
+      <div class="panel-head"><h2 id="previewTitle">Phone simulator (1080 × 1920)</h2><span id="previewSubtitle">Export: 9:16 · 1080 × 1920</span></div>
+      <div class="preview-content">
+        <div class="preview-meta">
+          <span class="live"><i class="dot"></i> <span id="liveBannerSummary">Centered above 4:5 · 68px</span></span>
+          <span class="value" id="dimensionLabel">1080 × 1920</span>
+        </div>
+        <div class="preview-stage">
+          <div class="phone" id="deviceFrame">
+            <div class="screen ref-backdrop" id="screen">
+              <canvas id="preview" width="1080" height="1920" aria-label="Live 1080x1920 story caption banner preview"></canvas>
+              <div class="story-ui hidden" id="storyUiOverlay" aria-hidden="true">
+                <div class="status"><span>9:41</span><span class="status-icons">● ▮ ▰</span></div>
+                <div class="story-bars"><i></i><i></i><i></i><i></i></div>
+                <div class="account">your_story</div>
+                <div class="bottom-ui"><div class="reply">Reply to story…</div><span class="heart">♡</span><span class="send">➤</span></div>
+              </div>
+              <div class="home-indicator hidden" id="homeIndicator"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="label-line"><span class="field-label">Quick export ratio</span><span class="hint">One-click transparent PNG download</span></div>
+          <div class="four-btns">
+            <button type="button" class="quick-btn active" data-quick-export="story">9:16 (1080×1920)</button>
+            <button type="button" class="quick-btn" data-quick-export="portrait">4:5 (1080×1350)</button>
+            <button type="button" class="quick-btn" data-quick-export="square">1:1 (1080×1080)</button>
+            <button type="button" class="quick-btn" data-quick-export="banner">Cropped Banner</button>
+          </div>
+        </div>
+
+        <div class="preview-actions">
+          <button type="button" id="export" class="primary">Export transparent PNG ↗</button>
+          <button type="button" id="copy" class="secondary">Copy PNG to clipboard</button>
+        </div>
+        <div class="preview-actions">
+        </div>
+        <div class="statusline" id="status" role="status" aria-live="polite">Ready · Banner is centered above the 4:5 line and inside video safe zones.</div>
+        <div class="tip"><b>Safe-zone &amp; 4:5 rules active.</b> For 1–2 lines, the banner is centered between the top cyan safe line (<b>88 px</b>) and the white <b>4:5</b> line (<b>285 px</b>), automatically shrinking font size if it touches the safe zone. When text breaks into <b>3+ lines</b>, it crosses the 4:5 line while staying inside the top and left/right video safe zones.</div>
+      </div>
+    </section>
+  </main>
+  <div class="footer-note">RB Banner Maker · Account-protected workspace · Transparent PNG export.</div>
+</div>
+<script type="module" src="/src/maker.js"></script>
+</body>
+</html>
