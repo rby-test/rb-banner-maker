@@ -1,5 +1,6 @@
-import { randomBytes, randomUUID } from 'node:crypto';
-import { getUser, admin, verifyRequestOrigin } from '@netlify/identity';
+import { randomUUID } from 'node:crypto';
+import * as Identity from '@netlify/identity';
+const { getUser, admin, verifyRequestOrigin } = Identity;
 import { getStore } from '@netlify/blobs';
 
 const json = (data, status = 200) => Response.json(data, {
@@ -10,9 +11,28 @@ const hasAdminRole = user => {
   const roles = user?.roles || user?.appMetadata?.roles || user?.app_metadata?.roles || [];
   return Array.isArray(roles) && roles.includes('admin');
 };
-function makeTemporaryPassword() {
-  // Cryptographically random, URL-safe characters plus a few guaranteed character classes.
-  return `${randomBytes(20).toString('base64url')}!Aa7`;
+async function sendInvite(email, name) {
+  // @netlify/identity has no admin.inviteUser, so call the Identity (GoTrue)
+  // /invite endpoint directly with the operator token the package exposes to functions.
+  const config = typeof Identity.getIdentityConfig === 'function' ? Identity.getIdentityConfig() : null;
+  if (!config?.url || !config?.token) {
+    throw new Error('Could not send the invitation: Netlify Identity is not enabled for this site, or the function has no admin token.');
+  }
+  const res = await fetch(`${config.url.replace(/\/$/, '')}/invite`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.token}` },
+    body: JSON.stringify({ email, data: { full_name: name } })
+  });
+  const text = await res.text();
+  let body = {};
+  try { body = text ? JSON.parse(text) : {}; } catch { /* non-JSON error page */ }
+  if (!res.ok) {
+    const detail = body.msg || body.error_description || body.error || body.message || text.slice(0, 200);
+    throw new Error(res.status === 422 || /already|registered|exists/i.test(String(detail))
+      ? 'An account with that email already exists. If they never finished setup, revoke it first and invite again.'
+      : `Invite failed (${res.status}): ${detail}`);
+  }
+  return body;
 }
 async function writeAudit(event) {
   try {
@@ -96,35 +116,11 @@ export default async function handler(request) {
       const email = String(body.email || '').trim().toLowerCase();
       if (!name) return json({ error: 'Enter the user’s name.' }, 400);
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: 'Enter a valid email address.' }, 400);
-      const password = makeTemporaryPassword();
-      const user = await admin.createUser({
-        email,
-        password,
-        data: { user_metadata: { full_name: name, must_change_password: true } }
-      });
-      await writeAudit({ at, action: 'created account', actor: actorEmail, targetEmail: email, targetId: user.id });
-      return json({
-        ok: true,
-        password,
-        user: { id: user.id, email: user.email || email, name: user.userMetadata?.full_name || user.user_metadata?.full_name || name, roles: user.roles || [] }
-      }, 201);
-    }
-
-    if (action === 'reset') {
-      const userId = String(body.userId || '').trim();
-      if (!userId) return json({ error: 'Missing user ID.' }, 400);
-      const existing = await admin.getUser(userId);
-      if (hasAdminRole(existing)) return json({ error: 'For safety, reset admin passwords through the Netlify Identity dashboard.' }, 403);
-      const email = existing.email || String(body.email || '');
-      const name = existing.userMetadata?.full_name || existing.user_metadata?.full_name || existing.name || '';
-      const password = makeTemporaryPassword();
-      const metadata = existing.userMetadata || existing.user_metadata || {};
-      await admin.updateUser(userId, {
-        password,
-        user_metadata: { ...metadata, full_name: name, must_change_password: true }
-      });
-      await writeAudit({ at, action: 'reset password', actor: actorEmail, targetEmail: email, targetId: userId });
-      return json({ ok: true, password, user: { id: userId, email, name } });
+      // The user receives an email, clicks the link, and chooses their own password.
+      // No password is ever generated or shown to the admin.
+      const user = await sendInvite(email, name);
+      await writeAudit({ at, action: 'sent invitation', actor: actorEmail, targetEmail: email, targetId: user?.id || '' });
+      return json({ ok: true, user: { id: user?.id || '', email, name } }, 201);
     }
 
     if (action === 'delete') {
