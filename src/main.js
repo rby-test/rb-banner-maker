@@ -146,16 +146,18 @@ $('showRecovery').addEventListener('click', () => {
 });
 $('backToLogin').addEventListener('click', () => showAuthMode('login'));
 $('loginForm').addEventListener('submit', async event => {
-  event.preventDefault(); clearNotice($('authStatus')); setBusy(event.currentTarget, true);
+  const form = event.currentTarget;
+  event.preventDefault(); clearNotice($('authStatus')); setBusy(form, true);
   try { await login($('loginEmail').value.trim(), $('loginPassword').value); const user = await getUser(); render(user); }
   catch (error) { showNotice($('authStatus'), error.message || 'Login failed. Check your email and password.', true); }
-  finally { setBusy(event.currentTarget, false); }
+  finally { setBusy(form, false); }
 });
 $('signupForm').addEventListener('submit', async event => {
+  const form = event.currentTarget;
   event.preventDefault(); clearNotice($('authStatus'));
   const password = $('signupPassword').value;
   if (password !== $('signupConfirm').value) { showNotice($('authStatus'), 'The passwords do not match.', true); return; }
-  setBusy(event.currentTarget, true);
+  setBusy(form, true);
   try {
     const user = await signup($('signupEmail').value.trim(), password, {full_name: $('signupName').value.trim()});
     const active = await getUser().catch(() => null);
@@ -168,31 +170,39 @@ $('signupForm').addEventListener('submit', async event => {
     const detail = typeof error === 'string'
       ? error
       : (error?.message || error?.error_description || error?.msg || error?.error || '');
-    const message = detail
-      ? String(detail)
-      : 'Sign-up failed because the authentication service returned no readable error. In Netlify, open Project configuration → Identity, make sure Identity is enabled and Registration preferences are set to Open, then try again. If it still fails, send the browser Console and the failed Identity request status.';
+    const status = [
+      error?.status, error?.statusCode, error?.cause?.status,
+      error?.cause?.statusCode, error?.response?.status, error?.cause?.response?.status
+    ].find(value => Number.isFinite(Number(value)) && Number(value) > 0);
+    const message = Number(status) === 404
+      ? 'Netlify Identity returned HTTP 404. The Identity service is not available for this site yet. Open this exact site in Netlify → Project configuration → Identity, click Enable Identity, then set Registration preferences to Open. If Identity is already enabled, confirm this is the same Netlify site/domain and that its deployment uses HTTPS.'
+      : (detail
+          ? String(detail)
+          : 'Sign-up failed because the authentication service returned no readable error. Check that Identity is enabled for this exact Netlify site and Registration preferences are set to Open, then try again.');
     showNotice($('authStatus'), message, true);
   }
-  finally { setBusy(event.currentTarget, false); }
+  finally { setBusy(form, false); }
 });
 $('recoveryForm').addEventListener('submit', async event => {
-  event.preventDefault(); clearNotice($('authStatus')); setBusy(event.currentTarget, true);
+  const form = event.currentTarget;
+  event.preventDefault(); clearNotice($('authStatus')); setBusy(form, true);
   try { await requestPasswordRecovery($('recoveryEmail').value.trim()); showNotice($('authStatus'), 'If the address is registered, a recovery email will be sent.'); }
   catch (error) { showNotice($('authStatus'), error.message || 'Could not request password recovery.', true); }
-  finally { setBusy(event.currentTarget, false); }
+  finally { setBusy(form, false); }
 });
 $('logoutButton').addEventListener('click', async () => { try { await logout(); } finally { currentUser = null; adminPanelOpen = false; render(null); } });
 $('changePasswordForm').addEventListener('submit', async event => {
+  const form = event.currentTarget;
   event.preventDefault(); clearNotice($('changePasswordStatus'));
   const password = $('newPassword').value;
   if (password !== $('confirmNewPassword').value) { showNotice($('changePasswordStatus'), 'The passwords do not match.', true); return; }
   if (password.length < 8) { showNotice($('changePasswordStatus'), 'Use at least 8 characters.', true); return; }
-  setBusy(event.currentTarget, true);
+  setBusy(form, true);
   try {
     await updateUser({password, data: {full_name: fullName(currentUser), must_change_password: false}});
     const user = await getUser(); render(user); showNotice($('changePasswordStatus'), 'Password updated. Your workspace is ready.');
   } catch (error) { showNotice($('changePasswordStatus'), error.message || 'Could not update password.', true); }
-  finally { setBusy(event.currentTarget, false); }
+  finally { setBusy(form, false); }
 });
 
 $('adminTrigger').addEventListener('click', () => {
@@ -207,7 +217,8 @@ $('adminTrigger').addEventListener('click', () => {
 });
 $('closeAdminLogin').addEventListener('click', () => { $('adminLoginCard').hidden = true; clearNotice($('adminLoginStatus')); });
 $('adminLoginForm').addEventListener('submit', async event => {
-  event.preventDefault(); clearNotice($('adminLoginStatus')); setBusy(event.currentTarget, true);
+  const form = event.currentTarget;
+  event.preventDefault(); clearNotice($('adminLoginStatus')); setBusy(form, true);
   try {
     if (currentUser) await logout();
     await login($('adminLoginEmail').value.trim(), $('adminLoginPassword').value);
@@ -215,16 +226,17 @@ $('adminLoginForm').addEventListener('submit', async event => {
     if (!hasAdminRole(user)) { await logout(); render(null); throw new Error('This account is not authorized for admin access. Assign the admin role in Netlify Identity first.'); }
     adminPanelOpen = true; render(user); $('adminPanel').scrollIntoView({behavior:'smooth',block:'start'});
   } catch (error) { showNotice($('adminLoginStatus'), error.message || 'Admin sign-in failed.', true); }
-  finally { setBusy(event.currentTarget, false); }
+  finally { setBusy(form, false); }
 });
 $('createUserForm').addEventListener('submit', async event => {
-  event.preventDefault(); clearNotice($('createUserStatus')); $('issuedCredential').hidden = true; setBusy(event.currentTarget, true);
+  const form = event.currentTarget;
+  event.preventDefault(); clearNotice($('createUserStatus')); $('issuedCredential').hidden = true; setBusy(form, true);
   try {
     await issueCredential('create', {name: $('adminNewName').value.trim(), email: $('adminNewEmail').value.trim()});
     showNotice($('createUserStatus'), 'Account created. Share the temporary password privately; the user must change it after signing in.');
     $('createUserForm').reset();
   } catch (error) { showNotice($('createUserStatus'), error.message || 'Could not create account.', true); }
-  finally { setBusy(event.currentTarget, false); }
+  finally { setBusy(form, false); }
 });
 $('usersTable').addEventListener('click', async event => {
   const button = event.target.closest('button[data-action]'); if (!button || button.disabled) return;
