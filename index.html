@@ -6,13 +6,12 @@
   <meta name="theme-color" content="#0c0d0f">
   <meta name="description" content="RB Banner Maker — create caption banners and export transparent PNGs.">
   <title>RB Banner Maker</title>
-  <link rel="icon" type="image/png" href="/rb-logo.png">
 </head>
 <body>
   <div class="site-shell">
     <header class="site-header">
       <a class="brand" href="/" aria-label="RB Banner Maker home">
-        <img src="/rb-logo.png" alt="RB" class="brand-mark">
+        <span class="brand-mark" aria-hidden="true">RB</span>
         <span><strong>RB Banner Maker</strong><small>Caption graphics studio</small></span>
       </a>
       <div class="header-actions">
@@ -32,7 +31,7 @@
 
         <section class="auth-card" aria-labelledby="authHeading">
           <div class="auth-card-head">
-            <img src="/rb-logo.png" alt="" class="card-mark">
+            <span class="card-mark" aria-hidden="true">RB</span>
             <div><h2 id="authHeading">Welcome back</h2><p id="authSubheading">Sign in to your workspace.</p></div>
           </div>
           <div class="auth-tabs" role="tablist" aria-label="Account access">
@@ -53,7 +52,7 @@
             <label>Password<input id="signupPassword" name="password" type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters"></label>
             <label>Confirm password<input id="signupConfirm" name="confirm" type="password" autocomplete="new-password" minlength="8" required placeholder="Repeat password"></label>
             <button class="btn btn-primary" type="submit">Create account <span aria-hidden="true">↗</span></button>
-            <p class="fine-print">Anyone can sign up. You may need to confirm your email before logging in.</p>
+            <p class="fine-print">After signing up, check your email for a confirmation link. Check Spam/Junk if needed.</p>
           </form>
 
           <form id="recoveryForm" class="form-stack" hidden>
