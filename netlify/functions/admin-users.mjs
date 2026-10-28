@@ -11,28 +11,44 @@ const hasAdminRole = user => {
   const roles = user?.roles || user?.appMetadata?.roles || user?.app_metadata?.roles || [];
   return Array.isArray(roles) && roles.includes('admin');
 };
-async function sendInvite(email, name) {
-  // @netlify/identity has no admin.inviteUser, so call the Identity (GoTrue)
-  // /invite endpoint directly with the operator token the package exposes to functions.
+function identityConfig() {
   const config = typeof Identity.getIdentityConfig === 'function' ? Identity.getIdentityConfig() : null;
   if (!config?.url || !config?.token) {
-    throw new Error('Could not send the invitation: Netlify Identity is not enabled for this site, or the function has no admin token.');
+    throw new Error('Netlify Identity is not enabled for this site, or the function has no admin token.');
   }
-  const res = await fetch(`${config.url.replace(/\/$/, '')}/invite`, {
+  return { url: config.url.replace(/\/$/, ''), token: config.token };
+}
+async function identityPost(path, payload) {
+  // @netlify/identity has no invite/recover helpers, so call the Identity (GoTrue)
+  // endpoints directly with the operator token the package exposes to functions.
+  const { url, token } = identityConfig();
+  const res = await fetch(`${url}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.token}` },
-    body: JSON.stringify({ email, data: { full_name: name } })
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload)
   });
   const text = await res.text();
   let body = {};
   try { body = text ? JSON.parse(text) : {}; } catch { /* non-JSON error page */ }
   if (!res.ok) {
     const detail = body.msg || body.error_description || body.error || body.message || text.slice(0, 200);
-    throw new Error(res.status === 422 || /already|registered|exists/i.test(String(detail))
-      ? 'An account with that email already exists. If they never finished setup, revoke it first and invite again.'
-      : `Invite failed (${res.status}): ${detail}`);
+    const err = new Error(`${path} failed (${res.status}): ${detail}`);
+    err.status = res.status; err.detail = String(detail);
+    throw err;
   }
   return body;
+}
+async function sendInvite(email, name) {
+  try { return await identityPost('/invite', { email, data: { full_name: name } }); }
+  catch (error) {
+    if (error.status === 422 || /already|registered|exists/i.test(error.detail || '')) {
+      throw new Error('An account with that email already exists. If they never finished setup, use Resend invite on their row (or Revoke, then invite again).');
+    }
+    throw error;
+  }
+}
+async function sendPasswordEmail(email) {
+  return identityPost('/recover', { email });
 }
 async function writeAudit(event) {
   try {
@@ -121,6 +137,33 @@ export default async function handler(request) {
       const user = await sendInvite(email, name);
       await writeAudit({ at, action: 'sent invitation', actor: actorEmail, targetEmail: email, targetId: user?.id || '' });
       return json({ ok: true, user: { id: user?.id || '', email, name } }, 201);
+    }
+
+    if (action === 'recover') {
+      const userId = String(body.userId || '').trim();
+      if (!userId) return json({ error: 'Missing user ID.' }, 400);
+      const existing = await admin.getUser(userId);
+      if (hasAdminRole(existing)) return json({ error: 'For safety, reset admin passwords through the Netlify Identity dashboard.' }, 403);
+      const email = existing.email || '';
+      if (!(existing.confirmedAt || existing.confirmed_at)) return json({ error: 'This user has not accepted their invitation yet. Use Resend invite instead.' }, 400);
+      await sendPasswordEmail(email);
+      await writeAudit({ at, action: 'sent password email', actor: actorEmail, targetEmail: email, targetId: userId });
+      return json({ ok: true, email });
+    }
+
+    if (action === 'resend') {
+      const userId = String(body.userId || '').trim();
+      if (!userId) return json({ error: 'Missing user ID.' }, 400);
+      const existing = await admin.getUser(userId);
+      if (hasAdminRole(existing)) return json({ error: 'Admin accounts must be managed in the Netlify Identity dashboard.' }, 403);
+      if (existing.confirmedAt || existing.confirmed_at) return json({ error: 'This user is already active. Use Send password email instead.' }, 400);
+      const email = existing.email || '';
+      const name = existing.userMetadata?.full_name || existing.user_metadata?.full_name || existing.name || '';
+      // An unconfirmed user cannot be invited twice, so replace the pending account with a fresh invite.
+      await admin.deleteUser(userId);
+      await sendInvite(email, name);
+      await writeAudit({ at, action: 'resent invitation', actor: actorEmail, targetEmail: email, targetId: userId });
+      return json({ ok: true, email });
     }
 
     if (action === 'delete') {
