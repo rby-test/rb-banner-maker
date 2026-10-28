@@ -34,7 +34,7 @@
             <span class="card-mark" aria-hidden="true">RB</span>
             <div><h2 id="authHeading">Welcome back</h2><p id="authSubheading">Sign in to your workspace.</p></div>
           </div>
-          <div class="auth-tabs" role="tablist" aria-label="Account access">
+          <div id="authTabs" class="auth-tabs" role="tablist" aria-label="Account access">
             <button class="auth-tab active" id="showLoginTab" type="button" role="tab" aria-selected="true">Log in</button>
             <button class="auth-tab" id="showSignupTab" type="button" role="tab" aria-selected="false">Create account</button>
           </div>
@@ -60,6 +60,14 @@
             <label>Email address<input id="recoveryEmail" type="email" autocomplete="email" required placeholder="you@example.com"></label>
             <button class="btn btn-primary" type="submit">Send recovery email</button>
             <button class="text-button" id="backToLogin" type="button">Back to login</button>
+          </form>
+
+          <form id="inviteSetupForm" class="form-stack" hidden>
+            <p class="form-note">You've been invited to RB Banner Maker. Choose a password below to accept the invitation and activate your account. You do not need a password from the administrator.</p>
+            <label>Create password<input id="invitePassword" name="password" type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters"></label>
+            <label>Confirm password<input id="invitePasswordConfirm" name="confirmPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="Enter the same password again"></label>
+            <button class="btn btn-primary" type="submit">Accept invitation &amp; set password</button>
+            <button class="text-button" id="cancelInviteSetup" type="button">Back to login</button>
           </form>
           <div id="authStatus" class="notice" role="status" aria-live="polite" hidden></div>
         </section>
@@ -89,32 +97,25 @@
 
         <section id="adminPanel" class="admin-card" hidden>
           <div class="section-head"><div><span class="eyebrow">RB CONTROL DESK</span><h2>Admin console</h2></div><span class="pill">ADMIN</span></div>
-          <p class="muted">Create accounts with one-time passwords, reset existing users, revoke access, and review the activity log.</p>
-          <div class="security-note"><strong>Credential handling:</strong> the password for a newly created or reset account is shown once. The server activity log never stores passwords. A separate credential log is saved only in this browser and can be exported as CSV; protect this browser and exported files.</div>
+          <p class="muted">Invite users by email, revoke access, and review the activity log. Invited users choose their own password.</p>
+          <div class="security-note"><strong>How invites work:</strong> enter a name and email. The user gets an email, clicks the link, and creates their own password. You never see or share a password.</div>
 
           <div class="admin-grid">
             <section class="sub-card">
-              <h3>Generate user access</h3>
+              <h3>Invite a user</h3>
               <form id="createUserForm" class="form-stack compact-form">
                 <label>Full name<input id="adminNewName" type="text" maxlength="80" required placeholder="User's name"></label>
                 <label>Email address<input id="adminNewEmail" type="email" required placeholder="user@example.com"></label>
-                <button class="btn btn-primary" type="submit">Create account + password</button>
+                <button class="btn btn-primary" type="submit">Send invitation</button>
               </form>
-              <div id="issuedCredential" class="issued-credential" hidden></div>
               <div id="createUserStatus" class="notice" role="status" aria-live="polite" hidden></div>
-            </section>
-            <section class="sub-card">
-              <div class="section-head small-head"><h3>Credential log</h3><button id="exportCredentialLog" class="mini-button" type="button">Export CSV</button></div>
-              <p class="tiny muted">Passwords are saved here locally only, not on the server. Clear this log on shared machines.</p>
-              <div id="credentialLogList" class="log-list"><p class="empty-state">No credentials issued from this browser yet.</p></div>
-              <button id="clearCredentialLog" class="text-button danger-text" type="button">Clear local credential log</button>
             </section>
           </div>
 
           <section class="sub-card users-card">
             <div class="section-head small-head"><h3>Registered users</h3><button id="refreshUsers" class="mini-button" type="button">Refresh</button></div>
             <div id="usersStatus" class="notice" role="status" aria-live="polite" hidden></div>
-            <div class="table-wrap"><table class="data-table"><thead><tr><th>User</th><th>Role</th><th>Last sign-in</th><th>Actions</th></tr></thead><tbody id="usersTable"><tr><td colspan="4" class="empty-state">Click Refresh to load users.</td></tr></tbody></table></div>
+            <div class="table-wrap"><table class="data-table"><thead><tr><th>User</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead><tbody id="usersTable"><tr><td colspan="4" class="empty-state">Click Refresh to load users.</td></tr></tbody></table></div>
           </section>
 
           <section class="sub-card">
