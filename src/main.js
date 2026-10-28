@@ -6,6 +6,7 @@ const qs = new URLSearchParams(window.location.search);
 let currentUser = null;
 let pendingInviteToken = null;
 let adminPanelOpen = false;
+let recoveryMode = false; // true after a password-reset email link is opened
 
 function hasAdminRole(user) {
   const roles = user?.roles || user?.appMetadata?.roles || user?.app_metadata?.roles || [];
@@ -85,11 +86,12 @@ function render(user) {
     return;
   }
   $('welcomeText').textContent = `${fullName(currentUser)} · ${currentUser.email || ''}`;
-  $('changePasswordPanel').hidden = !needsPasswordChange(currentUser);
-  $('openMaker').hidden = needsPasswordChange(currentUser);
+  const mustSetPassword = needsPasswordChange(currentUser) || recoveryMode;
+  $('changePasswordPanel').hidden = !mustSetPassword;
+  $('openMaker').hidden = mustSetPassword;
   $('logoutButton').hidden = false;
-  if (needsPasswordChange(currentUser)) {
-    $('welcomeText').textContent = 'Your administrator issued a temporary password. Set a new one to continue.';
+  if (mustSetPassword) {
+    $('welcomeText').textContent = recoveryMode ? 'Choose a new password to finish resetting your account.' : 'Set a new password to continue.';
   }
   const admin = hasAdminRole(currentUser);
   $('adminPanel').hidden = !(admin && adminPanelOpen);
@@ -113,7 +115,7 @@ function renderUsers(users) {
   tbody.innerHTML = users.map(user => {
     const roles = Array.isArray(user.roles) ? user.roles : [];
     const admin = roles.includes('admin');
-    return `<tr data-user-row="${escapeHTML(user.id)}"><td class="user-cell"><strong>${escapeHTML(user.name || 'Unnamed user')}</strong><small>${escapeHTML(user.email || '')}</small></td><td>${admin ? '<span class="pill">ADMIN</span>' : 'User'}</td><td>${user.confirmedAt ? (user.lastSignInAt ? 'Active · ' + escapeHTML(new Date(user.lastSignInAt).toLocaleDateString()) : 'Active') : '<span class="pill">INVITED</span>'}</td><td><div class="row-actions"><button type="button" data-action="delete" data-id="${escapeHTML(user.id)}" data-email="${escapeHTML(user.email || '')}" ${admin ? 'disabled title="Manage admin accounts from Netlify Identity"' : ''}>Revoke</button></div></td></tr>`;
+    return `<tr data-user-row="${escapeHTML(user.id)}"><td class="user-cell"><strong>${escapeHTML(user.name || 'Unnamed user')}</strong><small>${escapeHTML(user.email || '')}</small></td><td>${admin ? '<span class="pill">ADMIN</span>' : 'User'}</td><td>${user.confirmedAt ? (user.lastSignInAt ? 'Active · ' + escapeHTML(new Date(user.lastSignInAt).toLocaleDateString()) : 'Active') : '<span class="pill">INVITED</span>'}</td><td><div class="row-actions">${admin ? '' : (user.confirmedAt ? `<button type="button" data-action="recover" data-id="${escapeHTML(user.id)}" data-email="${escapeHTML(user.email || '')}">Send password email</button>` : `<button type="button" data-action="resend" data-id="${escapeHTML(user.id)}" data-email="${escapeHTML(user.email || '')}">Resend invite</button>`)}<button type="button" data-action="delete" data-id="${escapeHTML(user.id)}" data-email="${escapeHTML(user.email || '')}" ${admin ? 'disabled title="Manage admin accounts from Netlify Identity"' : ''}>Revoke</button></div></td></tr>`;
   }).join('');
 }
 async function loadAdminData() {
@@ -234,7 +236,7 @@ $('inviteSetupForm').addEventListener('submit', async event => {
     const detail = error?.message || error?.msg || error?.error_description || '';
     const status = error?.status || error?.cause?.status;
     const message = Number(status) === 404
-      ? 'The Netlify Identity invitation endpoint returned 404. Check Identity is enabled for this site, then ask the administrator to resend the invitation.'
+      ? 'This invitation link was already used or has been replaced by a newer one. If you already chose a password, go back to login and sign in. If you forgot it, use “Forgot password?” on the login page. Otherwise ask the administrator to click Resend invite and use the newest email.'
       : (detail.includes('invalid_grant') || detail.toLowerCase().includes('expired') || detail.toLowerCase().includes('invalid token')
         ? 'This invitation link is invalid, expired, or has already been used. Ask the administrator to send a fresh invitation, then open the new email link and choose a password here.'
         : (detail || 'We could not accept this invitation. Ask the administrator to send a new invitation and try again.'));
@@ -259,7 +261,8 @@ $('changePasswordForm').addEventListener('submit', async event => {
   if (password.length < 8) { showNotice($('changePasswordStatus'), 'Use at least 8 characters.', true); return; }
   setBusy(form, true);
   try {
-    await updateUser({password, data: {full_name: fullName(currentUser), must_change_password: false}});
+    await updateUser({password, data: {must_change_password: false}});
+    recoveryMode = false;
     const user = await getUser(); render(user); showNotice($('changePasswordStatus'), 'Password updated. Your workspace is ready.');
   } catch (error) { showNotice($('changePasswordStatus'), error.message || 'Could not update password.', true); }
   finally { setBusy(form, false); }
@@ -303,7 +306,16 @@ $('usersTable').addEventListener('click', async event => {
   const button = event.target.closest('button[data-action]'); if (!button || button.disabled) return;
   const action = button.dataset.action; const id = button.dataset.id; const email = button.dataset.email; const name = button.dataset.name || email;
   try {
-    if (action === 'delete') {
+    if (action === 'recover') {
+      if (!confirm(`Email ${email} a link to set a new password? Their current password keeps working until they use it.`)) return;
+      await adminFetch('POST', {action:'recover', userId:id});
+      showNotice($('usersStatus'), `Password email sent to ${email}. They click the link and choose a new password.`);
+    } else if (action === 'resend') {
+      if (!confirm(`Send ${email} a fresh invitation? Their previous invite link will stop working.`)) return;
+      await adminFetch('POST', {action:'resend', userId:id});
+      showNotice($('usersStatus'), `New invitation sent to ${email}.`);
+      await loadAdminData();
+    } else if (action === 'delete') {
       if (!confirm(`Permanently delete ${email} and revoke their account? This cannot be undone.`)) return;
       await adminFetch('POST', {action:'delete', userId:id});
       showNotice($('usersStatus'), `Access revoked for ${email}.`);
@@ -343,6 +355,9 @@ async function initializeAuth() {
     showInviteMode();
     return;
   }
+
+  // A password-reset email link signs the user in; make them choose the new password now.
+  if (callbackResult?.type === 'recovery') recoveryMode = true;
 
   currentUser = await getUser().catch(() => null);
   if (currentUser && needsPasswordChange(currentUser)) showAuthMode('login');
