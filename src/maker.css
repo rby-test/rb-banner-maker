@@ -175,3 +175,74 @@ button, .secondary, .primary, .quick-btn { min-height: 40px; }
   .preview-meta { align-items: flex-start; }
   .phone { width: min(100%, 300px); }
 }
+
+/* ============================================================
+   Inline editing layer (tap preview to type · drag corners to resize)
+   The layer is a 1080×1920 canvas-sized box scaled down to the phone
+   screen, so everything inside uses real canvas coordinates.
+   --inv = 1 / scale keeps handles a constant on-screen size.
+   ============================================================ */
+.edit-layer{position:absolute;left:0;top:0;width:1080px;height:1920px;transform-origin:0 0;z-index:6;pointer-events:none;--inv:3}
+.edit-layer .inline-editor{
+  position:absolute;margin:0;padding:0;border:0;border-radius:0;min-height:0;box-shadow:none;
+  background:transparent;color:transparent;-webkit-text-fill-color:transparent;caret-color:var(--accent);
+  resize:none;overflow:hidden;white-space:pre-wrap;overflow-wrap:break-word;outline:none;
+  pointer-events:none;z-index:1;-webkit-appearance:none;appearance:none
+}
+.edit-layer .inline-editor:focus{box-shadow:none;border:0}
+.edit-layer .inline-editor::selection{background:rgba(200,255,53,.38);-webkit-text-fill-color:transparent}
+.edit-layer.editing .inline-editor{pointer-events:auto}
+.sel-box{position:absolute;z-index:2;border:calc(2px * var(--inv)) dashed var(--accent);border-radius:calc(8px * var(--inv));opacity:0;pointer-events:none;transition:opacity .12s}
+.sel-box.on{opacity:1}
+.handle{position:absolute;width:calc(20px * var(--inv));height:calc(20px * var(--inv));background:#fff;border:calc(2.5px * var(--inv)) solid var(--accent);border-radius:50%;box-shadow:0 calc(1px * var(--inv)) calc(5px * var(--inv)) #0009;pointer-events:none;touch-action:none;display:block}
+.handle::after{content:"";position:absolute;inset:calc(-16px * var(--inv))}
+.sel-box.on .handle{pointer-events:auto}
+.handle.tl{left:0;top:0;transform:translate(-50%,-50%);cursor:nwse-resize}
+.handle.br{right:0;bottom:0;transform:translate(50%,50%);cursor:nwse-resize}
+.handle.tr{right:0;top:0;transform:translate(50%,-50%);cursor:nesw-resize}
+.handle.bl{left:0;bottom:0;transform:translate(-50%,50%);cursor:nesw-resize}
+.sel-tag{position:absolute;z-index:2;transform:translateX(-50%);padding:calc(3px * var(--inv)) calc(9px * var(--inv));border-radius:999px;background:var(--accent);color:var(--accentInk);font:800 calc(11px * var(--inv)) "Helvetica Neue",Roboto,system-ui,sans-serif;white-space:nowrap;pointer-events:none}
+.sel-tag.hint{background:#0b0c0ecc;color:#e8ebef;border:calc(1px * var(--inv)) solid #ffffff40;font-weight:700}
+.screen{cursor:text}
+.done-btn{display:none;background:var(--accent);color:var(--accentInk);padding:7px 14px;min-height:34px;border-radius:999px;font-size:12px}
+body.is-editing .done-btn{display:inline-flex;align-items:center}
+
+/* Phone quick bar + export bar are phone/tablet only */
+.quick-bar,.mobile-bar,.more-btn{display:none}
+.q-size{display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:10px}
+.q-size output{min-width:52px;text-align:right}
+.q-step{background:#24282d;color:#fff;border:1px solid #3c4249;border-radius:12px;width:46px;height:46px;font-size:20px;line-height:1;display:inline-flex;align-items:center;justify-content:center;gap:1px;padding:0}
+.q-step small{font-size:13px;margin-left:1px}
+.q-size input[type=range]{height:34px}
+.q-scroll{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 6px;margin:0 -2px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.q-scroll::-webkit-scrollbar{display:none}
+.q-chip{flex:none;display:inline-flex;align-items:center;gap:7px;min-height:42px;padding:0 14px;background:#1b1f24;color:#dce1e7;border:1px solid #343940;border-radius:999px;font-size:13px;font-weight:700;white-space:nowrap}
+.q-chip.active{border-color:var(--accent);color:var(--accent);background:#1b2212}
+.q-color input[type=color]{width:26px;height:26px;border-radius:50%;padding:0;border:2px solid #ffffff55;background:none}
+.q-color input[type=color]::-webkit-color-swatch-wrapper{padding:0}
+.q-color input[type=color]::-webkit-color-swatch{border:0;border-radius:50%}
+.q-color input[type=color]::-moz-color-swatch{border:0;border-radius:50%}
+.q-select{width:auto;padding:0 28px 0 14px;font-size:13px;border-radius:999px}
+
+@media (max-width:900px){
+  header{margin-bottom:10px;gap:8px}
+  .subhead,.top-tag{display:none}
+  .workspace{display:flex;flex-direction:column;gap:14px}
+  .preview-panel{order:-1}
+  #settingsPanel{order:2}
+  .preview-panel .panel-head,.preview-panel .tip,.preview-panel .preview-actions,.preview-panel .statusline{display:none}
+  .preview-content{padding:12px 12px 14px;gap:12px}
+  .preview-stage{padding:0}
+  .phone{width:min(100%,292px)}
+  .app{padding-bottom:104px}
+
+  .quick-bar{display:grid;gap:10px}
+  .more-btn{display:flex;align-items:center;justify-content:center;width:100%;background:#1b1f24;color:#dce1e7;border:1px dashed #4a5058;min-height:46px}
+  #settingsPanel .controls{display:none}
+  #settingsPanel.open .controls{display:grid}
+  #settingsPanel .panel-head{cursor:pointer}
+
+  .mobile-bar{display:grid;grid-template-columns:1fr auto;gap:8px;position:fixed;left:0;right:0;bottom:0;z-index:50;padding:10px 12px calc(10px + env(safe-area-inset-bottom,0px));background:linear-gradient(180deg,#0c0d0f00,#0c0d0f 28%);border-top:0}
+  .mobile-bar .primary,.mobile-bar .secondary{min-height:50px;font-size:15px;border-radius:14px}
+  body.is-editing .mobile-bar{display:none}
+}

@@ -63,6 +63,183 @@ async function initializeMakerAuth() {
     uploaded: '"UserUploadedFont", system-ui, sans-serif'
   };
 
+  /* ============================================================
+     Inline editing: tap the banner in the preview to type,
+     drag the corner handles to resize the font (Photoshop-style).
+     ============================================================ */
+  const screenEl = $('screen'), editLayer = $('editLayer'), editor = $('inlineEditor');
+  const selBox = $('selBox'), selTag = $('selTag');
+  let lastGeo = null, lastBox = null, editSelected = false;
+  const MIN_SIZE = 20, MAX_SIZE = 240;
+  const isNarrow = () => window.matchMedia('(max-width: 900px)').matches;
+
+  function screenScale(){ return (screenEl.clientWidth || 360) / PHONE_W; }
+  function toCanvasPt(ev){
+    const r = screenEl.getBoundingClientRect();
+    return { x: (ev.clientX - r.left) / r.width * PHONE_W, y: (ev.clientY - r.top) / r.height * PHONE_H };
+  }
+
+  function syncEditLayer(cfg, g){
+    const k = screenScale();
+    editLayer.style.transform = `scale(${k})`;
+    editLayer.style.setProperty('--inv', String(1 / k));
+
+    const l = Math.min(...g.rects.map(r => r.x));
+    const r = Math.max(...g.rects.map(q => q.x + q.w));
+    const t = Math.min(...g.rects.map(q => q.y));
+    const b = Math.max(...g.rects.map(q => q.y + q.h));
+    lastBox = { l, r, t, b };
+    const pad = 8;
+    Object.assign(selBox.style, {
+      left: (l - pad) + 'px', top: (t - pad) + 'px',
+      width: (r - l + pad * 2) + 'px', height: (b - t + pad * 2) + 'px'
+    });
+
+    // Invisible textarea that sits exactly on top of the canvas text so the caret lines up.
+    const lineStep = g.effectiveSize * cfg.lineHeight;
+    const innerW = (g.rightSafeEdge - g.leftSafeEdge) - g.effPadX * 2;
+    Object.assign(editor.style, {
+      left: (g.leftSafeEdge + g.effPadX) + 'px',
+      top: (g.centers[0] - lineStep / 2) + 'px',
+      width: innerW + 'px',
+      height: ((g.lines.length + 1) * lineStep) + 'px',
+      fontFamily: cfg.font,
+      fontWeight: String(cfg.weight),
+      fontSize: g.effectiveSize + 'px',
+      lineHeight: lineStep + 'px',
+      letterSpacing: g.effLetterSpacing + 'px',
+      textAlign: cfg.align
+    });
+    if (editor.value !== $('text').value) editor.value = $('text').value;
+
+    editLayer.classList.toggle('editing', editSelected);
+    selBox.classList.toggle('on', editSelected);
+    selTag.classList.toggle('hint', !editSelected);
+    selTag.textContent = editSelected
+      ? `${Math.round(g.effectiveSize)} px${cfg.autoFontSize ? '' : ' · manual'}`
+      : '✎ Tap banner to edit';
+    selTag.style.left = ((l + r) / 2) + 'px';
+    selTag.style.top = (b + pad + 14 / k) + 'px';
+  }
+
+  function selectBanner(focus){
+    editSelected = true;
+    document.body.classList.add('is-editing');
+    render();
+    if (focus) {
+      editor.focus({ preventScroll: true });
+      const n = editor.value.length;
+      try { editor.setSelectionRange(n, n); } catch (e) {}
+      if (isNarrow()) {
+        try { $('deviceFrame').scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) {}
+      }
+    }
+  }
+
+  function deselectBanner(){
+    editSelected = false;
+    document.body.classList.remove('is-editing');
+    editor.blur();
+    render();
+  }
+
+  // Tap/click on the preview: banner → edit, anywhere else → finish editing.
+  screenEl.addEventListener('click', ev => {
+    if (ev.target.closest('.handle') || ev.target === editor) return;
+    if (!lastBox) return;
+    const p = toCanvasPt(ev), slop = 44;
+    const hit = p.x >= lastBox.l - slop && p.x <= lastBox.r + slop && p.y >= lastBox.t - slop && p.y <= lastBox.b + slop;
+    if (hit) selectBanner(true);
+    else if (editSelected) deselectBanner();
+  });
+
+  editor.addEventListener('input', () => { $('text').value = editor.value; render(); });
+  editor.addEventListener('keydown', ev => { if (ev.key === 'Escape') deselectBanner(); });
+  $('doneEdit').addEventListener('click', deselectBanner);
+
+  function setAutoFit(on){ $('autoFontSize').checked = on; }
+  function setManualSize(v){
+    const s = Math.round(Math.max(MIN_SIZE, Math.min(MAX_SIZE, v)));
+    $('size').value = String(s);
+    render();
+  }
+
+  // Corner handles: scale the font from the banner's centre.
+  selBox.querySelectorAll('.handle').forEach(h => {
+    h.addEventListener('pointerdown', ev => {
+      if (!lastGeo || !lastBox) return;
+      ev.preventDefault();      // keeps the keyboard open
+      ev.stopPropagation();
+      try { h.setPointerCapture(ev.pointerId); } catch (e) {}
+      const cx = (lastBox.l + lastBox.r) / 2, cy = (lastBox.t + lastBox.b) / 2;
+      const p0 = toCanvasPt(ev);
+      const d0 = Math.max(24, Math.hypot(p0.x - cx, p0.y - cy));
+      const s0 = lastGeo.effectiveSize;
+      if ($('autoFontSize').checked) {
+        setAutoFit(false);
+        $('status').textContent = 'Manual size · Auto-fit is off. Turn Auto-fit back on to snap inside the safe zones.';
+      }
+      const move = e2 => {
+        const p = toCanvasPt(e2);
+        setManualSize(s0 * Math.hypot(p.x - cx, p.y - cy) / d0);
+      };
+      const up = () => {
+        h.removeEventListener('pointermove', move);
+        h.removeEventListener('pointerup', up);
+        h.removeEventListener('pointercancel', up);
+      };
+      h.addEventListener('pointermove', move);
+      h.addEventListener('pointerup', up);
+      h.addEventListener('pointercancel', up);
+    });
+  });
+
+  /* ---------- Phone quick bar (mirrors the main controls) ---------- */
+  const qFont = $('qFont');
+  function syncQuickBar(cfg, g){
+    const eff = Math.round(g.effectiveSize);
+    $('qSize').value = String(eff);
+    $('qSizeOut').textContent = eff + ' px';
+    $('qTextColor').value = cfg.textColor;
+    $('qFillColor').value = cfg.fillColor;
+    document.querySelectorAll('[data-q-shape]').forEach(b => b.classList.toggle('active', b.dataset.qShape === cfg.shape));
+    document.querySelectorAll('[data-q-align]').forEach(b => b.classList.toggle('active', b.dataset.qAlign === cfg.align));
+    $('qAuto').classList.toggle('active', cfg.autoFontSize);
+    $('qShadow').classList.toggle('active', cfg.shadow);
+    const opts = [...$('font').options].filter(o => !o.disabled && !o.hidden);
+    if (qFont.options.length !== opts.length) {
+      qFont.innerHTML = '';
+      opts.forEach(o => qFont.add(new Option(o.textContent.replace(/ ·.*$/, '').replace(/\s*\(.*\)/, ''), o.value)));
+    }
+    qFont.value = $('font').value;
+  }
+
+  function bindProxy(id, targetId, evt){
+    $(id).addEventListener(evt, () => { $(targetId).value = $(id).value; $(targetId).dispatchEvent(new Event(evt === 'input' ? 'input' : 'change', { bubbles: true })); });
+  }
+  bindProxy('qTextColor', 'textColor', 'input');
+  bindProxy('qFillColor', 'fillColor', 'input');
+  bindProxy('qFont', 'font', 'change');
+
+  $('qSize').addEventListener('input', () => { setAutoFit(false); setManualSize(Number($('qSize').value)); });
+  const nudge = d => { setAutoFit(false); setManualSize((lastGeo ? lastGeo.effectiveSize : num('size')) + d); };
+  $('qSizeDown').addEventListener('click', () => nudge(-4));
+  $('qSizeUp').addEventListener('click', () => nudge(4));
+  document.querySelectorAll('[data-q-shape]').forEach(b => b.addEventListener('click', () => { $('shape').value = b.dataset.qShape; render(); }));
+  document.querySelectorAll('[data-q-align]').forEach(b => b.addEventListener('click', () => { $('align').value = b.dataset.qAlign; render(); }));
+  $('qAuto').addEventListener('click', () => { setAutoFit(!$('autoFontSize').checked); render(); });
+  $('qShadow').addEventListener('click', () => { $('shadow').checked = !$('shadow').checked; render(); });
+  $('toggleSettings').addEventListener('click', () => {
+    const panel = $('settingsPanel');
+    const open = panel.classList.toggle('open');
+    $('toggleSettings').setAttribute('aria-expanded', String(open));
+    $('toggleSettings').textContent = open ? '⚙ Hide settings ▴' : '⚙ More settings ▾';
+    if (open) setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30);
+  });
+
+  if (window.ResizeObserver) new ResizeObserver(() => render()).observe(screenEl);
+  window.addEventListener('resize', render);
+
   function num(id){ return Number($(id).value); }
   function clampInt(value, fallback, min=64, max=6000){
     const v = Math.round(Number(value));
@@ -735,8 +912,11 @@ async function initializeMakerAuth() {
     pctx.clearRect(0, 0, PHONE_W, PHONE_H);
     drawGuides(pctx, cfg);
     const g = drawBanner(pctx, cfg);
+    lastGeo = g;
     updateLabels(cfg, g);
     applyBackdrop();
+    syncEditLayer(cfg, g);
+    syncQuickBar(cfg, g);
   }
 
   function blobFromCanvas(canvas){
@@ -828,9 +1008,10 @@ async function initializeMakerAuth() {
   }
 
   async function exportPNG(overridePreset, overrideMode){
-    const btn = $('export'), status = $('status');
-    btn.disabled = true;
+    const btn = $('export'), btnM = $('exportM'), status = $('status');
+    btn.disabled = true; btnM.disabled = true;
     btn.textContent = 'Loading font & rendering…';
+    btnM.textContent = 'Rendering…';
     try {
       await waitForSelectedFont();
       render();
@@ -848,8 +1029,9 @@ async function initializeMakerAuth() {
     } catch (err) {
       status.textContent = `Export failed: ${err.message || err}`;
     } finally {
-      btn.disabled = false;
+      btn.disabled = false; btnM.disabled = false;
       btn.textContent = 'Export transparent PNG ↗';
+      btnM.textContent = 'Export transparent PNG ↗';
     }
   }
 
@@ -920,7 +1102,7 @@ async function initializeMakerAuth() {
     $('fontFileStatus').textContent = 'Use a font file you have permission to use. You can also load your local Instagram Sans Bold .ttf/.otf file here.';
     $('font').querySelector('option[value="uploaded"]').disabled = true;
     $('status').textContent = 'Reference look restored · Helvetica Neue Extra Bold centered above 4:5 line.';
-    render();
+    if (editSelected) deselectBanner(); else render();
   }
 
   controls.forEach(id => {
@@ -977,6 +1159,8 @@ async function initializeMakerAuth() {
 
   $('export').addEventListener('click', () => exportPNG());
   $('copy').addEventListener('click', copyPNG);
+  $('exportM').addEventListener('click', () => exportPNG());
+  $('copyM').addEventListener('click', copyPNG);
   $('reset').addEventListener('click', reset);
 
   render();
