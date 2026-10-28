@@ -1,11 +1,11 @@
 import './site.css';
-import { signup, login, logout, getUser, handleAuthCallback, requestPasswordRecovery, updateUser } from '@netlify/identity';
+import { signup, login, logout, getUser, handleAuthCallback, acceptInvite, requestPasswordRecovery, updateUser } from '@netlify/identity';
 
 const $ = id => document.getElementById(id);
 const qs = new URLSearchParams(window.location.search);
 let currentUser = null;
+let pendingInviteToken = null;
 let adminPanelOpen = false;
-const CREDENTIAL_LOG_KEY = 'rbBannerMakerCredentialLogV1';
 
 function hasAdminRole(user) {
   const roles = user?.roles || user?.appMetadata?.roles || user?.app_metadata?.roles || [];
@@ -35,27 +35,6 @@ function setBusy(form, busy) {
 function escapeHTML(value) {
   return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 }
-function getCredentialLog() {
-  try { const parsed = JSON.parse(localStorage.getItem(CREDENTIAL_LOG_KEY) || '[]'); return Array.isArray(parsed) ? parsed : []; }
-  catch { return []; }
-}
-function saveCredentialLog(entries) {
-  try { localStorage.setItem(CREDENTIAL_LOG_KEY, JSON.stringify(entries.slice(0, 500))); }
-  catch { alert('The local credential log could not be saved. Export credentials immediately and keep the file private.'); }
-  renderCredentialLog();
-}
-function appendCredentialLog(entry) {
-  const entries = getCredentialLog();
-  entries.unshift(entry);
-  saveCredentialLog(entries);
-}
-function renderCredentialLog() {
-  const entries = getCredentialLog();
-  const container = $('credentialLogList');
-  if (!container) return;
-  if (!entries.length) { container.innerHTML = '<p class="empty-state">No credentials issued from this browser yet.</p>'; return; }
-  container.innerHTML = entries.slice(0, 50).map(entry => `<div class="log-item"><strong>${escapeHTML(entry.name || entry.email)} · ${escapeHTML(entry.action)}</strong><small>${escapeHTML(entry.email)} · ${escapeHTML(new Date(entry.at).toLocaleString())}</small><small>Password: <code>${escapeHTML(entry.password)}</code></small></div>`).join('');
-}
 function downloadCSV(filename, rows) {
   const csv = rows.map(row => row.map(value => `"${String(value ?? '').replace(/"/g,'""')}"`).join(',')).join('\r\n');
   const blob = new Blob(['\uFEFF' + csv], {type:'text/csv;charset=utf-8'});
@@ -65,9 +44,11 @@ function downloadCSV(filename, rows) {
 }
 function showAuthMode(mode) {
   const loginMode = mode === 'login';
+  $('authTabs').hidden = false;
   $('loginForm').hidden = !loginMode;
   $('signupForm').hidden = loginMode;
   $('recoveryForm').hidden = true;
+  $('inviteSetupForm').hidden = true;
   $('showLoginTab').classList.toggle('active', loginMode);
   $('showSignupTab').classList.toggle('active', !loginMode);
   $('showLoginTab').setAttribute('aria-selected', String(loginMode));
@@ -75,6 +56,20 @@ function showAuthMode(mode) {
   $('authHeading').textContent = loginMode ? 'Welcome back' : 'Create your account';
   $('authSubheading').textContent = loginMode ? 'Sign in to your workspace.' : 'Your creative workspace starts here.';
   clearNotice($('authStatus'));
+}
+function showInviteMode() {
+  $('authScreen').hidden = false;
+  $('dashboard').hidden = true;
+  $('authTabs').hidden = true;
+  $('loginForm').hidden = true;
+  $('signupForm').hidden = true;
+  $('recoveryForm').hidden = true;
+  $('inviteSetupForm').hidden = false;
+  $('authHeading').textContent = 'Accept your invitation';
+  $('authSubheading').textContent = 'Choose your password to activate your account.';
+  $('sessionLabel').textContent = 'Complete account setup';
+  clearNotice($('authStatus'));
+  $('invitePassword').focus();
 }
 function render(user) {
   currentUser = user || null;
@@ -100,7 +95,6 @@ function render(user) {
   $('adminPanel').hidden = !(admin && adminPanelOpen);
   $('adminLoginCard').hidden = true;
   if (admin && adminPanelOpen) {
-    renderCredentialLog();
     loadAdminData().catch(error => showNotice($('usersStatus'), error.message || 'Could not load admin data.', true));
   }
 }
@@ -119,7 +113,7 @@ function renderUsers(users) {
   tbody.innerHTML = users.map(user => {
     const roles = Array.isArray(user.roles) ? user.roles : [];
     const admin = roles.includes('admin');
-    return `<tr data-user-row="${escapeHTML(user.id)}"><td class="user-cell"><strong>${escapeHTML(user.name || 'Unnamed user')}</strong><small>${escapeHTML(user.email || '')}</small></td><td>${admin ? '<span class="pill">ADMIN</span>' : 'User'}</td><td>${escapeHTML(user.lastSignInAt ? new Date(user.lastSignInAt).toLocaleDateString() : 'Not yet')}</td><td><div class="row-actions"><button type="button" data-action="reset" data-id="${escapeHTML(user.id)}" data-email="${escapeHTML(user.email || '')}" data-name="${escapeHTML(user.name || '')}">Reset pass</button><button type="button" data-action="delete" data-id="${escapeHTML(user.id)}" data-email="${escapeHTML(user.email || '')}" ${admin ? 'disabled title="Manage admin accounts from Netlify Identity"' : ''}>Revoke</button></div></td></tr>`;
+    return `<tr data-user-row="${escapeHTML(user.id)}"><td class="user-cell"><strong>${escapeHTML(user.name || 'Unnamed user')}</strong><small>${escapeHTML(user.email || '')}</small></td><td>${admin ? '<span class="pill">ADMIN</span>' : 'User'}</td><td>${user.confirmedAt ? (user.lastSignInAt ? 'Active · ' + escapeHTML(new Date(user.lastSignInAt).toLocaleDateString()) : 'Active') : '<span class="pill">INVITED</span>'}</td><td><div class="row-actions"><button type="button" data-action="delete" data-id="${escapeHTML(user.id)}" data-email="${escapeHTML(user.email || '')}" ${admin ? 'disabled title="Manage admin accounts from Netlify Identity"' : ''}>Revoke</button></div></td></tr>`;
   }).join('');
 }
 async function loadAdminData() {
@@ -131,18 +125,8 @@ async function loadAdminData() {
   const events = data.events || [];
   activity.innerHTML = events.length ? events.map(e => `<div class="log-item"><strong>${escapeHTML(e.action)} · ${escapeHTML(e.targetEmail || '—')}</strong><small>${escapeHTML(e.actor || 'Admin')} · ${escapeHTML(new Date(e.at).toLocaleString())}</small></div>`).join('') : '<p class="empty-state">No server activity recorded yet.</p>';
 }
-async function issueCredential(action, userPayload) {
-  const data = await adminFetch('POST', {action, ...userPayload});
-  const user = data.user || {};
-  const password = data.password;
-  appendCredentialLog({action: action === 'create' ? 'created' : 'password reset', name: user.name || userPayload.name || userPayload.email || '', email: user.email || userPayload.email || '', password, at: new Date().toISOString()});
-  $('issuedCredential').hidden = false;
-  $('issuedCredential').innerHTML = `<strong>${action === 'create' ? 'ACCOUNT CREATED' : 'TEMPORARY PASSWORD GENERATED'}</strong><div>${escapeHTML(user.name || userPayload.name || '')} · ${escapeHTML(user.email || userPayload.email || '')}</div><code id="issuedPasswordValue">${escapeHTML(password)}</code><div class="issued-actions"><button type="button" id="copyIssuedPassword">Copy password</button><button type="button" id="downloadIssuedCredential">Download this credential</button></div><small class="tiny muted">The user must change this temporary password after their first sign-in.</small>`;
-  $('copyIssuedPassword').addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(password); showNotice($('createUserStatus'), 'Password copied. Share it with the user privately.'); }
-    catch { showNotice($('createUserStatus'), 'Copy failed; select the password above and copy it manually.', true); }
-  });
-  $('downloadIssuedCredential').addEventListener('click', () => downloadCSV('rb-user-credential.csv', [['Name','Email','Temporary password','Action','Created at'], [user.name || userPayload.name || '', user.email || userPayload.email || '', password, action, new Date().toISOString()]]));
+async function sendInvitation(userPayload) {
+  await adminFetch('POST', {action: 'create', ...userPayload});
   await loadAdminData();
 }
 
@@ -203,6 +187,62 @@ $('signupForm').addEventListener('submit', async event => {
   }
   finally { setBusy(form, false); }
 });
+$('cancelInviteSetup').addEventListener('click', () => {
+  pendingInviteToken = null;
+  $('invitePassword').value = '';
+  $('invitePasswordConfirm').value = '';
+  showAuthMode('login');
+  showNotice($('authStatus'), 'Invitation setup was cancelled. If you still need access, ask the administrator to send a new invitation.');
+});
+$('inviteSetupForm').addEventListener('submit', async event => {
+  const form = event.currentTarget;
+  event.preventDefault();
+  clearNotice($('authStatus'));
+  const password = $('invitePassword').value;
+  const confirmPassword = $('invitePasswordConfirm').value;
+  if (password.length < 8) {
+    showNotice($('authStatus'), 'Use a password with at least 8 characters.', true);
+    return;
+  }
+  if (password !== confirmPassword) {
+    showNotice($('authStatus'), 'The passwords do not match. Please try again.', true);
+    return;
+  }
+  if (!pendingInviteToken) {
+    showNotice($('authStatus'), 'This invitation link is missing or expired. Ask the administrator to send a new invitation.', true);
+    return;
+  }
+  setBusy(form, true);
+  try {
+    // Netlify Identity invitations remain unconfirmed until this token is
+    // accepted. The invited user chooses their own password here.
+    const acceptedUser = await acceptInvite(pendingInviteToken, password);
+    pendingInviteToken = null;
+    $('invitePassword').value = '';
+    $('invitePasswordConfirm').value = '';
+    currentUser = acceptedUser || await getUser().catch(() => null);
+    if (currentUser) {
+      render(currentUser);
+      $('welcomeText').textContent = 'Invitation accepted. Your RB Banner Maker account is ready.';
+    } else {
+      render(null);
+      showAuthMode('login');
+      showNotice($('authStatus'), 'Invitation accepted. Your account is active; please log in with your email and the password you just created.');
+    }
+  } catch (error) {
+    console.error('[RB Banner Maker] Invitation acceptance failed:', error);
+    const detail = error?.message || error?.msg || error?.error_description || '';
+    const status = error?.status || error?.cause?.status;
+    const message = Number(status) === 404
+      ? 'The Netlify Identity invitation endpoint returned 404. Check Identity is enabled for this site, then ask the administrator to resend the invitation.'
+      : (detail.includes('invalid_grant') || detail.toLowerCase().includes('expired') || detail.toLowerCase().includes('invalid token')
+        ? 'This invitation link is invalid, expired, or has already been used. Ask the administrator to send a fresh invitation, then open the new email link and choose a password here.'
+        : (detail || 'We could not accept this invitation. Ask the administrator to send a new invitation and try again.'));
+    showNotice($('authStatus'), message, true);
+  } finally {
+    setBusy(form, false);
+  }
+});
 $('recoveryForm').addEventListener('submit', async event => {
   const form = event.currentTarget;
   event.preventDefault(); clearNotice($('authStatus')); setBusy(form, true);
@@ -250,24 +290,20 @@ $('adminLoginForm').addEventListener('submit', async event => {
 });
 $('createUserForm').addEventListener('submit', async event => {
   const form = event.currentTarget;
-  event.preventDefault(); clearNotice($('createUserStatus')); $('issuedCredential').hidden = true; setBusy(form, true);
+  event.preventDefault(); clearNotice($('createUserStatus')); setBusy(form, true);
   try {
-    await issueCredential('create', {name: $('adminNewName').value.trim(), email: $('adminNewEmail').value.trim()});
-    showNotice($('createUserStatus'), 'Account created. Share the temporary password privately; the user must change it after signing in.');
+    const email = $('adminNewEmail').value.trim();
+    await sendInvitation({name: $('adminNewName').value.trim(), email});
+    showNotice($('createUserStatus'), `Invitation sent to ${email}. They will click the link in the email and choose their own password.`);
     $('createUserForm').reset();
-  } catch (error) { showNotice($('createUserStatus'), error.message || 'Could not create account.', true); }
+  } catch (error) { showNotice($('createUserStatus'), error.message || 'Could not send invitation.', true); }
   finally { setBusy(form, false); }
 });
 $('usersTable').addEventListener('click', async event => {
   const button = event.target.closest('button[data-action]'); if (!button || button.disabled) return;
   const action = button.dataset.action; const id = button.dataset.id; const email = button.dataset.email; const name = button.dataset.name || email;
   try {
-    if (action === 'reset') {
-      if (!confirm(`Generate a temporary password for ${email}? Their current password will stop working.`)) return;
-      $('issuedCredential').hidden = true;
-      await issueCredential('reset', {userId:id, email, name});
-      showNotice($('createUserStatus'), `Temporary password generated for ${email}. Share it privately.`);
-    } else if (action === 'delete') {
+    if (action === 'delete') {
       if (!confirm(`Permanently delete ${email} and revoke their account? This cannot be undone.`)) return;
       await adminFetch('POST', {action:'delete', userId:id});
       showNotice($('usersStatus'), `Access revoked for ${email}.`);
@@ -276,30 +312,36 @@ $('usersTable').addEventListener('click', async event => {
   } catch (error) { showNotice($('usersStatus'), error.message || 'The action failed.', true); }
 });
 $('refreshUsers').addEventListener('click', () => loadAdminData().catch(error => showNotice($('usersStatus'), error.message || 'Could not refresh users.', true)));
-$('exportCredentialLog').addEventListener('click', () => {
-  const entries = getCredentialLog();
-  downloadCSV('rb-credential-log.csv', [['Name','Email','Password','Action','Issued at'], ...entries.map(e => [e.name,e.email,e.password,e.action,e.at])]);
-});
-$('clearCredentialLog').addEventListener('click', () => {
-  if (!confirm('Clear the saved credentials from this browser? This cannot be undone.')) return;
-  localStorage.removeItem(CREDENTIAL_LOG_KEY); renderCredentialLog();
-});
-
 // Initialize asynchronous authentication without top-level await so Vite can
 // compile to its configured ES2020/browser targets.
 async function initializeAuth() {
+  // Netlify puts invite/confirmation/recovery tokens in the URL hash, not the
+  // query string. Capture the invite token before processing the callback.
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const inviteTokenFromHash = hashParams.get('invite_token');
+  let callbackResult = null;
   try {
-    await handleAuthCallback();
+    callbackResult = await handleAuthCallback();
   } catch (error) {
-    if (window.location.search.includes('confirmation_token') ||
-        window.location.search.includes('recovery_token') ||
-        window.location.search.includes('invite_token')) {
-      showNotice(
-        $('authStatus'),
-        error.message || 'The account link could not be processed. Request a fresh link and try again.',
-        true
-      );
+    console.error('[RB Banner Maker] Auth callback failed:', error);
+    if (inviteTokenFromHash) {
+      pendingInviteToken = inviteTokenFromHash;
+      render(null);
+      showInviteMode();
+      showNotice($('authStatus'), 'Your invitation link was received, but the callback could not be completed automatically. Try choosing a password below. If it fails, request a fresh invitation.', true);
+      return;
     }
+    const hadAuthToken = /(?:confirmation_token|recovery_token|email_change_token)/.test(window.location.hash);
+    if (hadAuthToken) {
+      showNotice($('authStatus'), error.message || 'The account link could not be processed. Request a fresh link and try again.', true);
+    }
+  }
+
+  if (callbackResult?.type === 'invite' && callbackResult.token) {
+    pendingInviteToken = callbackResult.token;
+    render(null);
+    showInviteMode();
+    return;
   }
 
   currentUser = await getUser().catch(() => null);
