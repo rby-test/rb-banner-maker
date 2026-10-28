@@ -161,7 +161,18 @@ $('signupForm').addEventListener('submit', async event => {
     const active = await getUser().catch(() => null);
     if (active) render(active);
     else showNotice($('authStatus'), `Account created for ${user.email || $('signupEmail').value}. Check your email for a confirmation link, then log in.`);
-  } catch (error) { showNotice($('authStatus'), error.message || 'Sign-up failed. Please try again.', true); }
+  } catch (error) {
+    // Keep the raw failure in the browser console so an operator can diagnose
+    // Identity configuration/network errors without hiding the useful details.
+    console.error('[RB Banner Maker] Sign-up request failed:', error);
+    const detail = typeof error === 'string'
+      ? error
+      : (error?.message || error?.error_description || error?.msg || error?.error || '');
+    const message = detail
+      ? String(detail)
+      : 'Sign-up failed because the authentication service returned no readable error. In Netlify, open Project configuration → Identity, make sure Identity is enabled and Registration preferences are set to Open, then try again. If it still fails, send the browser Console and the failed Identity request status.';
+    showNotice($('authStatus'), message, true);
+  }
   finally { setBusy(event.currentTarget, false); }
 });
 $('recoveryForm').addEventListener('submit', async event => {
