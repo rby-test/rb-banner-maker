@@ -1,11 +1,14 @@
 import { getUser, logout } from '@netlify/identity';
 
-const authUser = await getUser().catch(() => null);
-const roleList = authUser?.roles || authUser?.appMetadata?.roles || [];
-const mustChange = authUser?.userMetadata?.must_change_password === true || authUser?.user_metadata?.must_change_password === true;
-if (!authUser || mustChange) {
-  window.location.replace(mustChange ? '/?changePassword=1' : '/?auth=required');
-} else {
+// Use an async initializer rather than top-level await so Vite can target ES2020 browsers.
+async function initializeMakerAuth() {
+  const authUser = await getUser().catch(() => null);
+  const mustChange = authUser?.userMetadata?.must_change_password === true || authUser?.user_metadata?.must_change_password === true;
+  if (!authUser || mustChange) {
+    window.location.replace(mustChange ? '/?changePassword=1' : '/?auth=required');
+    return;
+  }
+
   document.body.classList.remove('auth-pending');
   const makerLogout = document.getElementById('makerLogout');
   if (makerLogout) makerLogout.addEventListener('click', async () => {
@@ -982,5 +985,6 @@ if (!authUser || mustChange) {
     $('status').textContent = 'macOS detected · Helvetica Neue Extra Bold & SF Pro available.';
   }
 })();
-
 }
+
+void initializeMakerAuth();
